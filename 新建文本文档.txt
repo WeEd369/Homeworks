@@ -1,0 +1,5 @@
+在 Git Bash 中进入仓库文件夹，执行：
+
+git add .  # 添加新文件
+git commit -m "C语言第三次作业：数组练习"  # 描述清楚新增内容
+git push origin main  # 推送到GitHub
