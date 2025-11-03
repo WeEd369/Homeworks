@@ -1,0 +1,404 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=GB2312"  />
+<meta name="keywords"content="HTML,CABBAGE,newkid,WeEd" />
+<meta name="description"content="这里有一个我自己做的网页">
+<title>搭建我的第一个HTML文件</title>
+ <style>
+        #draggable-title {
+	position: absolute;
+	top: 371px;
+	left: 69px;
+	cursor: move;
+	user-select: none;
+	background:#fff;
+	padding:8px 15px;
+	border:2px solid #333;
+	border-radius: 4px;}
+	.erasee{
+		position:absolute;
+		width:60px;
+		height:60px;
+		background:#FF3;
+		border-radius:4px;}
+	#score{
+		position: fixed;
+		top: 20px;
+		left: 50%;
+		transform: translateX(-50%);
+		background: #C9F;
+		color: white;
+		padding: 15px 30px;
+		font-size:24px;
+		border-radius: 30px;
+		opacity: 0;
+	    transition: opacity 0.5s ease;
+		pointer-events: none;
+		font-weight: bold;
+		z-index:10;}
+	.erasee.danger {
+		background: #f33;
+		color: white;
+		border: 2px solid #900;
+		animation: pulse 1s infinite alternate;}
+	    @keyframes pulse {
+		from { transform: scale(1); }
+		to { transform: scale(1.05); }}
+	#game-over {
+		position: fixed;
+		top: 0;
+		left: 0;
+		width: 100%;
+		height: 100%;
+		background: rgba(0,0,0,0.8);
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		z-index: 999;
+		opacity: 0;
+		pointer-events: none;
+		transition: opacity 0.5s ease;}
+	#game-over.show {
+		opacity: 1;
+		pointer-events: auto;}
+	#game-over h2 {
+		color: white;
+		font-size: 48px;
+		margin-bottom: 20px;}
+	#game-over p {
+		color: white;
+		font-size: 24px;
+		margin: 10px 0;}
+	#restart-btn {
+		margin-top: 30px;
+		padding: 12px 30px;
+		font-size: 20px;
+		background: #4CAF50;
+		color: white;
+		border: none;
+		border-radius: 8px;
+		cursor: pointer;
+		transition: background 0.3s ease;}
+	#restart-btn:hover {
+		background: #45a049;}#restart-btn {
+		margin-top: 30px;
+		padding: 12px 30px;
+		font-size: 20px;
+		background: #4CAF50;
+		color: white;
+		border: none;
+		border-radius: 8px;
+		cursor: pointer;
+		transition: background 0.3s ease;}
+	#restart-btn:hover {
+		background: #45a049;}
+	.temp-notice {
+		pointer-events: none;}
+ </style>
+</head>
+<body>
+<div id="game-over">
+	<h2>游戏结束！</h2>
+	<p>你擦除了危险元素</p>
+	<p>最终得分: <span id="final-score">0</span></p>
+    <button id="restart-btn">重新开始游戏</button>
+</div>
+<hr><br><br><br>
+<div id="score">NOW:</div>
+<h2 name="定义段落名称" id="draggable-title" class="设置属性类型" style="color:blue;" title="段落提示信息">&quot;这里有一个网页橡皮&quot;</h2>
+<div class="erasee" style="top: 150px; left: 100px;">这是一段话</div>
+<div class="erasee" style="top: 250px; left: 600px;">这是一段话</div>
+<div class="erasee" style="top: 250px; left: 60px;">这是一段话</div>
+<div class="erasee" style="top: 450px; left: 340px;">这是一段话</div>
+<script>
+    const title = document.getElementById('draggable-title');
+	let Drag = false;
+	let ofX,ofY;
+	let score = 0;
+	let Score = 0;
+	let lastscore = 0;
+	let eraseTextElement = null;
+	let isGameOver = false;
+	const gameOverScreen = document.getElementById('game-over');
+	const finalScoreEl = document.getElementById('final-score');
+	const scoreBoard = document.getElementById('score');
+	const restartBtn = document.getElementById('restart-btn');
+	let Timer = null;
+	const Max = 8;
+	const initialErasees = Array.from(document.querySelectorAll('.erasee'));
+	const dangerFadeTimers = new Map();
+	let scoreHideTimer = null;
+	const temp = new Set();
+	function restartGame() {
+		isGameOver = false;
+		score = 0;
+		lastscore = 0;
+		eraseTextElement = null;
+		dangerFadeTimers.forEach(timer => clearTimeout(timer));
+		dangerFadeTimers.clear();
+		temp.forEach(timer => clearTimeout(timer));
+		temp.clear();
+		if (scoreHideTimer) clearTimeout(scoreHideTimer);
+		document.querySelectorAll('.temp-notice').forEach(el => el.remove());
+		gameOverScreen.classList.remove('show');
+		title.style.pointerEvents = 'auto';
+		title.style.opacity = 1;
+		scoreBoard.textContent = `NOW: ${score}`;
+		scoreBoard.classList.remove('danger');
+		scoreBoard.style.opacity = 0;
+		const allErasees = document.querySelectorAll('.erasee');
+		allErasees.forEach(el => {
+			if (!initialErasees.includes(el)) {
+				el.remove();
+			} else {
+				el.style.display = 'block';
+				el.style.opacity = 1;
+				el.classList.remove('danger');}});
+		document.addEventListener('mousemove', throttledMouseMove);
+		triggerGenerate();
+	}
+	restartBtn.addEventListener('click', restartGame);
+    function throttle(fn,delay){
+		let lasttime = 0;
+		return function(...args){
+			const now = Date.now();
+			if (now - lasttime >= delay){
+				lasttime = now;
+				fn.apply(this, args);}};}
+	function gameOver() {
+		isGameOver = true;
+		Drag = false;
+		title.style.pointerEvents = 'none';
+		title.style.opacity = 0.5;
+		finalScoreEl.textContent = score;
+		gameOverScreen.classList.add('show');
+		if (Timer) clearTimeout(Timer);
+		if (scoreHideTimer) clearTimeout(scoreHideTimer);
+		document.removeEventListener('mousemove', throttledMouseMove);
+		tempNoticeTimers.forEach(timer => clearTimeout(timer));
+		tempNoticeTimers.clear();
+		document.querySelectorAll('.temp-notice').forEach(el => el.remove());
+		// 清除eraseTextElement
+		if (eraseTextElement && document.body.contains(eraseTextElement)) {
+			document.body.removeChild(eraseTextElement);
+			eraseTextElement = null;}}
+	function isDangerElement() {
+		return Math.random() < 0.15;}
+	function handleDangerFade(element) {
+		if (!element || !element.classList.contains('danger')) return; 
+if (dangerFadeTimers.has(element)) {
+			clearTimeout(dangerFadeTimers.get(element));}
+		const timer = setTimeout(() => {
+			element.style.opacity = 0; 
+						setTimeout(() => {
+		if (!isGameOver && element.style.display !== 'none') {
+				element.style.display = 'none';
+				triggerGenerate();}
+				dangerFadeTimers.delete(element);}, 1000);}, 2000);
+        dangerFadeTimers.set(element, timer);}
+    title.addEventListener('mousedown',(e) =>{
+		if (isGameOver) return;
+		e.preventDefault();
+		Drag = true;
+		ofX = e.clientX - title.offsetLeft;
+		ofY = e.clientY - title.offsetTop;
+		title.style.zIndex = 10;
+	});
+	const throttledMouseMove = throttle((e) => {
+		if (!Drag || isGameOver) return;
+		const newl = e.clientX - ofX;
+		const newt = e.clientY - ofY;
+		title.style.left = newl + 'px';
+		title.style.top = newt + 'px';
+		erase();},16);
+	document.addEventListener('mousemove',throttledMouseMove);
+	document.addEventListener('mouseup',() => {
+		Drag = false;
+		title.style.zIndex = 1;});
+	function erase(){
+		const spot = title.getBoundingClientRect();
+		const verge = {
+			left: spot.left,
+			right: spot.right,
+			top: spot.top,
+			bottom: spot.bottom};
+		if (eraseTextElement) {
+			const eraseTextSpot = eraseTextElement.getBoundingClientRect();
+			const eraseTextCenterX = eraseTextSpot.left + eraseTextSpot.width / 2;
+			const eraseTextCenterY = eraseTextSpot.top + eraseTextSpot.height / 2;
+			const textTL = Math.abs(eraseTextCenterX - verge.left) <= 25 && eraseTextCenterY >= verge.top && eraseTextCenterY <= verge.bottom;
+			const textTR = Math.abs(eraseTextCenterX - verge.right) <= 25 && eraseTextCenterY >= verge.top && eraseTextCenterY <= verge.bottom;
+			const textTT = Math.abs(eraseTextCenterY - verge.top) <= 25 && eraseTextCenterX >= verge.left && eraseTextCenterX <= verge.right;
+			const textTB = Math.abs(eraseTextCenterY - verge.bottom) <= 25 && eraseTextCenterX >= verge.left && eraseTextCenterX <= verge.right;
+			if (textTL || textTR || textTT || textTB) {
+				if (eraseTextElement.classList.contains('danger')) {
+					gameOver();
+					return;}
+				score += lastscore;
+				lastscore = 0;
+				scoreBoard.textContent = `NOW: ${score}`;
+				showScoreBoard();
+				const reEraseText = document.createElement('div');
+				reEraseText.textContent = '擦除擦除积分！';
+				reEraseText.className = 'temp-notice'; 
+				if (isDangerElement()) {
+					reEraseText.classList.add('danger');
+					handleDangerFade(reEraseText);}
+				reEraseText.style.cssText = `
+				position: fixed;
+				top: calc(50% + 80px);
+				left: 50%;
+				transform: translate(-50%, -50%);
+				background: rgba(255, 255, 255, 0.8);
+				padding: 15px 30px;
+				font-size: 28px;
+				border-radius: 10px;
+				pointer-events: none;
+				z-index: 101;
+				opacity: 1;
+				transition: opacity 0.3s ease;
+				font-weight: bold;
+				color: ${reEraseText.classList.contains('danger') ? '#f33' : 'blue'};`;
+				document.body.appendChild(reEraseText);
+				const fadeTimer = setTimeout(() => {
+					reEraseText.style.opacity = '0';
+					const removeTimer = setTimeout(() => {
+						if (document.body.contains(reEraseText)) {
+							document.body.removeChild(reEraseText);}
+						tempNoticeTimers.delete(fadeTimer);
+						tempNoticeTimers.delete(removeTimer);}, 1000);
+					tempNoticeTimers.add(removeTimer);}, 1);
+				tempNoticeTimers.add(fadeTimer);
+				eraseTextElement.style.opacity = '0';
+		const eraseTextTimer = setTimeout(() => {
+					if (document.body.contains(eraseTextElement)) {
+						document.body.removeChild(eraseTextElement);}
+					eraseTextElement = null;
+					tempNoticeTimers.delete(eraseTextTimer);}, 1000);
+				tempNoticeTimers.add(eraseTextTimer);return;}}
+		const scoreBox = document.getElementById('score');
+		const scoreBoxSpot = scoreBox.getBoundingClientRect();
+		const scoreCenterX = scoreBoxSpot.left + scoreBoxSpot.width / 2;
+		const scoreCenterY = scoreBoxSpot.top + scoreBoxSpot.height / 2;
+ 		const scoreTL = Math.abs(scoreCenterX - verge.left) <= 20 && scoreCenterY >= verge.top && scoreCenterY <= verge.bottom;
+		const scoreTR = Math.abs(scoreCenterX - verge.right) <= 20 && scoreCenterY >= verge.top && scoreCenterY <= verge.bottom;
+		const scoreTT = Math.abs(scoreCenterY - verge.top) <= 20 && scoreCenterX >= verge.left && scoreCenterX <= verge.right;
+		const scoreTB = Math.abs(scoreCenterY - verge.bottom) <= 20 && scoreCenterX >= verge.left && scoreCenterX <= verge.right;
+			if (scoreTL || scoreTR || scoreTT || scoreTB) {
+			if (scoreBox.classList.contains('danger')) {
+				gameOver();
+				return;}
+			lastscore = Score;
+			score = 0;
+			scoreBoard.textContent = `NOW: ${score}`;
+            showScoreBoard(); 
+		    if(!eraseTextElement){
+				const eraseText = document.createElement('div');
+			    eraseText.textContent = '擦除积分！';
+				eraseText.className = 'temp-notice';
+			    if (isDangerElement()) {
+					eraseText.classList.add('danger');
+					handleDangerFade(eraseText);}
+				eraseText.style.cssText = `
+		        position: fixed;
+			    top: 50%;
+ 			    left: 50%;
+			    transform: translate(-50%, -50%);
+			    background: rgba(255, 255, 255, 0.8);
+			    padding: 20px 40px;
+			    font-size: 36px;
+			    border-radius: 10px;
+			    pointer-events: auto;
+			    z-index: 100;
+			    opacity: 1;
+			    transition: opacity 1s ease;
+			    font-weight: bold;
+			   color: ${eraseText.classList.contains('danger') ? '#f33' : '#C9F'};`;
+			    document.body.appendChild(eraseText);
+     			eraseTextElement = eraseText;
+	    		handleDangerFade(eraseText);}
+			return;}	
+		const erasees = document.querySelectorAll('.erasee');
+		erasees.forEach(el => {
+			if (el.style.display === 'none') return;
+			const elspot = el.getBoundingClientRect();
+			const centerX = elspot.left + elspot.width / 2;
+			const centerY = elspot.top + elspot.height / 2;
+			const TL = Math.abs(centerX - verge.left) <= 10 &&
+			 centerY >= verge.top && centerY <= verge.bottom;
+			const TR = Math.abs(centerX - verge.right) <= 10 && 
+             centerY >= verge.top && centerY <= verge.bottom;
+            const TT = Math.abs(centerY - verge.top) <= 10 && 
+             centerX >= verge.left && centerX <= verge.right;
+            const TB = Math.abs(centerY - verge.bottom) <= 10 && 
+             centerX >= verge.left && centerX <= verge.right;
+			if (TL||TR||TB||TT){
+				if (el.classList.contains('danger') && dangerFadeTimers.has(el)) {
+					clearTimeout(dangerFadeTimers.get(el));
+					dangerFadeTimers.delete(el);}
+				if (el.classList.contains('danger')){
+					gameOver();
+					return;}
+				el.style.display = 'none';
+			    updateScore();
+			    triggerGenerate();}});}
+function showScoreBoard(){
+	if (scoreHideTimer) clearTimeout(scoreHideTimer);
+	scoreBoard.style.display = 'none';
+	void scoreBoard.offsetWidth;
+	scoreBoard.style.display = 'block';
+	scoreBoard.style.opacity = 0;
+	void scoreBoard.offsetWidth;
+	scoreBoard.style.opacity = 1;
+	scoreHideTimer = setTimeout(() => {
+		scoreBoard.style.opacity = 0;
+		},3000);}
+function updateScore(){
+	score++;
+	Score = score;
+	scoreBoard.textContent = `NOW: ${score}`;
+	if (isDangerElement()) {
+			scoreBoard.classList.add('danger');
+	} else {
+			scoreBoard.classList.remove('danger');}
+	handleDangerFade(scoreBoard);
+	showScoreBoard();}
+function triggerGenerate(){
+	if (Timer) clearTimeout(Timer);
+	if (isGameOver) return;
+	const erasees = document.querySelectorAll('.erasee');
+	let current = 0;
+	erasees.forEach(el => {if(el.style.display !== 'none')current++;});
+	if(current < Max){
+		creat();
+	    Timer = setTimeout(triggerGenerate,2000);}
+	else{
+		clearTimeout(Timer);}}
+function creat(){
+	const erasees = document.querySelectorAll('.erasee');
+	let see = 0;
+	erasees.forEach(el => {
+		if(el.style.display !== 'none'){
+			see++;}});
+	if(see < Max){
+	const newerasee = document.createElement('div');
+	newerasee.className = 'erasee';
+	newerasee.textContent = '这还有一句话';
+	if(isDangerElement()){
+		newerasee.classList.add('danger');}
+	const pageW = window.innerWidth;
+	const pageH = window.innerHeight;
+	const elesize = 60;
+	const randomLeft = Math.floor(Math.random()*(pageW - elesize));
+	const randomTop = Math.floor(Math.random()*(pageH - elesize));
+	newerasee.style.left = randomLeft + 'px';
+	newerasee.style.top = randomTop + 'px';
+	document.body.appendChild(newerasee);
+	handleDangerFade(newerasee);
+	if (newerasee.classList.contains('danger')) {
+				handleDangerFade(newerasee);}}}
+</script>
+</body>
+</html>
